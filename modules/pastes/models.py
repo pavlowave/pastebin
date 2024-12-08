@@ -1,26 +1,48 @@
+"""
+Настройка моделей для базы данных
+"""
+
+from django.contrib.auth import get_user_model
 from django.db import models
-from django.utils.crypto import get_random_string
-from django.utils.timezone import now
-import boto3
-from datetime import timedelta
 
-class Paste(models.Model):
-    content_url = models.URLField()
-    slug = models.SlugField(unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
+User = get_user_model()
 
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = get_random_string(8)
-        super().save(*args, **kwargs)
 
-    def is_expired(self):
-        return now() > self.expires_at
+class Text(models.Model):
+    """Сообщение"""
 
-    def get_content(self):
-        # Получаем файл из Yandex Cloud Object Storage
-        s3 = boto3.client('s3', endpoint_url='https://storage.yandexcloud.net')
-        bucket_name = 'название_вашего_бакета'
-        key = self.content_url.split('/')[-1]  # Извлекаем ключ из URL
-        return s3.get_object(Bucket=bucket_name, Key=key)['Body'].read().decode('utf-8')
+    uuid_url = models.UUIDField(unique=True, editable=False)
+    drive_id = models.CharField(max_length=44, verbose_name="Хэш id файла")
+    is_temporary = models.BooleanField(
+        default=False,
+        verbose_name="Сообщение временное"
+    )
+    datetime_of_deletion = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name="Дата удаления"
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="author",
+        blank=True,
+        null=True,
+        verbose_name="Автор",
+    )
+    datetime_of_creation = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания"
+    )
+    is_private = models.BooleanField(default=False, verbose_name="Приватное")
+
+    def __str__(self):
+        if self.author is not None:
+            return f"Сообщение от {self.author.username}"
+        else:
+            return "Анонимное сообщение"
+
+    class Meta:
+        ordering = ("-pk",)
+        verbose_name = "Сообщение"
+        verbose_name_plural = "Сообщения"

@@ -1,39 +1,94 @@
-import os
-import base64
-from datetime import timedelta
-from django.http import JsonResponse, Http404
+"""
+View сообщений
+"""
+import uuid
+
 from django.shortcuts import get_object_or_404
-from .models import Paste
-from django.utils.timezone import now
-import boto3
+from rest_framework import status, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-# Функция для генерации случайной строки в base64
-def get_random_base64_string(length=8):
-    random_bytes = os.urandom(length)
-    base64_string = base64.urlsafe_b64encode(random_bytes).decode('utf-8')
-    return base64_string[:length]  # Ограничиваем длину строки
+from drive.message import GDrive
+from text.models import Text
+from text.hash_generation import hash_decode
+from text.service import create_message
+from text.serializers import InputTextSerializer, TextSerializer
 
-def create_paste(request):
-    content = request.POST.get('content')
-    expires_in = int(request.POST.get('expires_in', 3600))  # Время жизни пасты в секундах
 
-    # Сохраняем текст в Yandex Cloud Object Storage
-    s3 = boto3.client('s3', endpoint_url='https://storage.yandexcloud.net')
-    bucket_name = 'название_вашего_бакета'
-    key = get_random_base64_string(8)  # Генерация уникального ключа для файла в base64
-    s3.put_object(Bucket=bucket_name, Key=key, Body=content.encode('utf-8'))
+class InputTextAPIView(APIView):
+    """Генерация сообщений"""
 
-    # Создаём метаданные
-    expires_at = now() + timedelta(seconds=expires_in)
-    paste = Paste.objects.create(content_url=f'https://{bucket_name}.storage.yandexcloud.net/{key}', expires_at=expires_at)
+    def post(self, request, *args, **kwargs):
+        serializer = InputTextSerializer(data=request.data)
+        if serializer.is_valid():
+            uuid_url = uuid.uuid4()
+            author = request.user if request.user.is_authenticated else None
+            create_message(serializer.validated_data, uuid_url, author)
 
-    return JsonResponse({'slug': paste.slug}, status=201)
+            return Response(
+                {
+                    "message": "Сообщение успешно создано",
+                    "uuid_url": uuid_url,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-def get_paste(request, slug):
-    paste = get_object_or_404(Paste, slug=slug)
-    if paste.is_expired():
-        paste.delete()
-        raise Http404("Paste has expired")
 
-    content = paste.get_content()
-    return JsonResponse({'content': content})
+class ShowMessageAPIView(APIView):
+    """Отображение сообщения"""
+
+    def get(self, request, uuid_url, *args, **kwargs):
+        message_object = get_object_or_404(Text, uuid_url=uuid_url)
+        drive_id = hash_decode(message_object.drive_id)
+        content = GDrive.download(drive_id)
+
+        serializer = TextSerializer(message_object)
+        return Response(
+            {
+                "message": serializer.data,
+                "content": content,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class MessageFeedAPIView(APIView):
+    """Отображение ленты сообщений"""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        messages = Text.objects.filter(is_private=False)
+        serializer = TextSerializer(messages, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UserMessageFeedAPIView(APIView):
+    """Отображение сообщений пользователя"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        messages = Text.objects.filter(author_id=request.user.pk)
+        serializer = TextSerializer(messages, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DeleteMessageAPIView(APIView):
+    """Удаление сообщения"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, uuid_url, *args, **kwargs):
+        message = get_object_or_404(Text, uuid_url=uuid_url)
+
+        if message.author != request.user:
+            return Response({"detail": "Не авторизован"}, status=status.HTTP_403_FORBIDDEN)
+
+        decoded_hash = hash_decode(message.drive_id)
+        GDrive.delete(decoded_hash)
+
+        message.delete()
+        return Response({"detail": "Сообщение успешно удалено"}, status=status.HTTP_204_NO_CONTENT)

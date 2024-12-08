@@ -1,0 +1,38 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пастбин</title>
+    <link rel="stylesheet" href="{% static 'css/index/index.css' %}">
+</head>
+<body>
+    <!-- Контейнер для всех записей -->
+    <div class="container entries-section">
+        <h1>Все записи</h1>
+        <ul class="entries-list">
+            {% for entry in entries %}
+                <li class="entry">
+                    <strong>{{ entry.title }}</strong><br>
+                    <p>{{ entry.content }}</p><br>
+                    <small>{{ entry.created_at }}</small>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Форма для добавления новой записи -->
+    <div class="container form-section">
+        <h2>Добавить новую запись</h2>
+        <form method="POST" action="{% url 'paste' %}">
+            {% csrf_token %}
+            <div class="textarea-container">
+                <textarea name="content" placeholder="Введите ваш текст сюда..." required></textarea>
+            </div>
+            <input type="text" name="title" placeholder="Введите заголовок" required />
+            <button type="submit">Сохранить текст</button>
+        </form>
+    </div>
+</body>
+</html>
