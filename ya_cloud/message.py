@@ -8,13 +8,11 @@ from io import BytesIO
 
 
 class YandexS3:
-    # Конфигурация
     ENDPOINT_URL = "https://storage.yandexcloud.net"
     ACCESS_KEY = os.environ.get("YANDEX_S3_ACCESS_KEY")
     SECRET_KEY = os.environ.get("YANDEX_S3_SECRET_KEY")
     BUCKET_NAME = os.environ.get("YANDEX_S3_BUCKET")
 
-    # Клиент S3
     S3 = boto3.client(
         "s3",
         endpoint_url=ENDPOINT_URL,
@@ -54,16 +52,16 @@ class YandexS3:
         cls.S3.delete_object(Bucket=cls.BUCKET_NAME, Key=object_key)
 
 
-# Пример использования
-if __name__ == "__main__":
-    # Загрузка файла
-    uploaded_key = YandexS3.upload("local_file.txt", "uploaded_file.txt")
-    print(f"Файл загружен под ключом: {uploaded_key}")
+# # Пример использования
+# if __name__ == "__main__":
+#     # Загрузка файла
+#     uploaded_key = YandexS3.upload("local_file.txt", "uploaded_file.txt")
+#     print(f"Файл загружен под ключом: {uploaded_key}")
 
-    # Скачивание файла
-    content = YandexS3.download("uploaded_file.txt")
-    print(f"Содержимое файла: {content}")
+#     # Скачивание файла
+#     content = YandexS3.download("uploaded_file.txt")
+#     print(f"Содержимое файла: {content}")
 
-    # Удаление файла
-    YandexS3.delete("uploaded_file.txt")
-    print("Файл удален.")
+#     # Удаление файла
+#     YandexS3.delete("uploaded_file.txt")
+#     print("Файл удален.")

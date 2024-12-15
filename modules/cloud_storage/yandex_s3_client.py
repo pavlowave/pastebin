@@ -1,44 +1,42 @@
 import boto3
-from botocore.exceptions import ClientError
 from django.conf import settings
 
-class YandexS3Client:
+class S3Service:
     def __init__(self):
-        self.s3 = boto3.client(
-            's3',
+        """Инициализация клиента S3"""
+        self.client = boto3.client(
+            service_name='s3',
+            endpoint_url=settings.AWS_S3_ENDPOINT_URL,
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            endpoint_url=settings.AWS_S3_ENDPOINT_URL,
-            region_name=settings.AWS_S3_REGION_NAME,
         )
-        self.bucket_name = settings.AWS_STORAGE_BUCKET_NAME
 
-    def upload_file(self, file_path: str):
-        object_name = file_path.split("/")[-1]  # Извлекаем имя файла
-        try:
-            with open(file_path, "rb") as file:
-                self.s3.put_object(
-                    Bucket=self.bucket_name,
-                    Key=object_name,
-                    Body=file,
-                )
-            print(f"File {object_name} uploaded to {self.bucket_name}")
-        except ClientError as e:
-            print(f"Error uploading file: {e}")
+    def create_bucket(self, bucket_name):
+        """Создать бакет"""
+        self.client.create_bucket(Bucket=bucket_name)
 
-    def delete_file(self, object_name: str):
-        try:
-            self.s3.delete_object(Bucket=self.bucket_name, Key=object_name)
-            print(f"File {object_name} deleted from {self.bucket_name}")
-        except ClientError as e:
-            print(f"Error deleting file: {e}")
+    def upload_file(self, file_obj, bucket_name, key):
+        """Загрузить файл в бакет"""
+        self.client.upload_fileobj(file_obj, bucket_name, key)
 
-    def get_file(self, object_name: str, destination_path: str):
+    def list_objects(self, bucket_name):
+        """Получить список объектов в бакете"""
+        response = self.client.list_objects(Bucket=bucket_name)
+        return [obj['Key'] for obj in response.get('Contents', [])]
+
+    def delete_objects(self, bucket_name, keys):
+        """Удалить объекты из бакета"""
+        delete_format = [{'Key': key} for key in keys]
+        self.client.delete_objects(Bucket=bucket_name, Delete={'Objects': delete_format})
+
+    def get_object(self, bucket_name, key):
+        """Скачать объект из бакета"""
+        response = self.client.get_object(Bucket=bucket_name, Key=key)
+        return response['Body'].read()
+    def upload_text(self, text, bucket_name, key):
+        """Метод для загрузки текста в S3"""
         try:
-            response = self.s3.get_object(Bucket=self.bucket_name, Key=object_name)
-            data = response['Body'].read()
-            with open(destination_path, "wb") as file:
-                file.write(data)
-            print(f"File {object_name} downloaded to {destination_path}")
-        except ClientError as e:
-            print(f"Error downloading file: {e}")
+            # Загружаем текст как объект в S3
+            self.client.put_object(Bucket=bucket_name, Key=key, Body=text, StorageClass='COLD')
+        except Exception as e:
+            raise Exception(f"Failed to upload text to S3: {str(e)}")
