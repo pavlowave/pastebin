@@ -1,3 +1,7 @@
+"""
+Скачивание, загрузка и удаление сообщений с Yandex Cloud
+"""
+
 import boto3
 from django.conf import settings
 
